@@ -160,10 +160,11 @@ func (app *app) handleMessages(groupName string, messages []*internal.Message, c
 	// regex matching newline newlines
 	re := regexp.MustCompile(`\r?\n`)
 
+	notified := false
+
 	// go through all messages from newest to oldest
 	for i := len(messages) - 1; i >= 0; i-- {
 
-		notified := false
 		message := messages[i]
 
 		// get the sender
