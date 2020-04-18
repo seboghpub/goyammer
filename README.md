@@ -1,31 +1,11 @@
-# goyammer
+Copied from [here](https://www.sohamkamani.com/blog/golang/2018-06-24-oauth-with-golang/)
 
-Notify about new Yammer messages (private ones as well as messages in subscribed groups).
+Needs a config file `config.yaml` next to the executable with the following content:
 
-## Login:
-
-First one needs to get a Yammer access token. Using:
-
-~~~~ {.bash}
-goyammer login --client <xyz>
+~~~~ {.yaml}
+clientID: xyz
+clientSecret: ABC
 ~~~~
 
-where `xyz` must be replaced with the appropriate value, acquires a Yammer access token and stores it locally in `~/.goyammer`.
-
-Note, this only needs to be done once.
-
-## Poll:
-
-Using: 
-
-~~~~ {.bash}
-goyammer poll [--interval <seconds>]
-~~~~
- 
-one starts the polling and notification.
-
-## Screenshot
-
-![goyammer](screenshot.png)
-
+where `xyz` and `ABC` must be replaced with the appropriate values.
 

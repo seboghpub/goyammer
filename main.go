@@ -1,214 +1,131 @@
 package main
 
 import (
-	"flag"
+	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/mqu/go-notify"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
-	"github.com/seboghpub/goyammer/internal"
 	"io/ioutil"
+	"net/http"
 	"os"
-	"os/signal"
-	"regexp"
-	"syscall"
 	"time"
+	"github.com/spf13/viper"
 )
 
-var buildVersion = "to be set by linker"
-var buildGithash = "to be set by linker"
+func makeHandler(dataChannel chan YammerOAuthAccessResponse) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// First, we need to get the value of the `code` query param
+		err := r.ParseForm()
+		if err != nil {
+			fmt.Fprintf(os.Stdout, "could not parse query: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+		}
+		code := r.FormValue("code")
 
-type app struct {
-	users    *internal.Users
-	messages *internal.Messages
-	tmpdir   string
+		// Next, lets for the HTTP request to call the github oauth enpoint
+		// to get our access token
+		reqURL := fmt.Sprintf("https://www.yammer.com/oauth2/access_token?client_id=%s&client_secret=%s&code=%s", viper.GetString("clientID"), viper.GetString("clientSecret"), code)
+		req, err := http.NewRequest(http.MethodPost, reqURL, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stdout, "could not create HTTP request: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+		}
+		// We set this header since we want the response
+		// as JSON
+		req.Header.Set("accept", "application/json")
+
+		// Send out the HTTP request
+		httpClient := http.Client{}
+		res, err := httpClient.Do(req)
+		if err != nil {
+			fmt.Fprintf(os.Stdout, "could not send HTTP request: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		defer res.Body.Close()
+
+		bodyBytes, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			fmt.Fprintf(os.Stdout, "could not read body: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+
+		//fmt.Printf("body: %s\n", string(bodyBytes))
+
+		// Parse the request body into the `OAuthAccessResponse` struct
+		var t YammerOAuthAccessResponse
+		if err := json.Unmarshal(bodyBytes, &t); err != nil {
+			fmt.Fprintf(os.Stdout, "could not parse JSON response: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+		}
+		dataChannel <- t
+		close(dataChannel)
+
+		// Finally, send a response to redirect the user to the "welcome" page
+		// with the access token
+		w.Header().Set("Location", "/welcome")
+		w.WriteHeader(http.StatusFound)
+	}
+}
+
+func makeWelcomeHandler(c chan bool) func(http.ResponseWriter, *http.Request) {
+	return func(res http.ResponseWriter, req *http.Request) {
+		fmt.Fprintf(res, "success")
+		c <- true
+	}
 }
 
 func main() {
 
-	// initialze logger
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-
-	// initialize go-notify
-	notify.Init("goyammer")
-
-	// see: https://blog.rapid7.com/2016/08/04/build-a-simple-cli-tool-with-golang/
-
-	// subcommands
-	loginCommand := flag.NewFlagSet("login", flag.ExitOnError)
-	pollCommand := flag.NewFlagSet("poll", flag.ExitOnError)
-
-	// subcommand flag pointers
-	loginClientId := loginCommand.String("id", "", "The client id. (Required)")
-	pollInterval := pollCommand.Uint("interval", 3, "The number of seconds to wait between request clientId. (Optional)")
-
-	// verify that a subcommand has been provided
-	if len(os.Args) < 2 {
-		log.Fatal().Msg("expected 'doLogin', 'poll' subcommand")
+	viper.SetConfigName("config")
+	viper.AddConfigPath(".")
+	err := viper.ReadInConfig()
+	if err != nil {
+		panic(fmt.Errorf("fatal error config file: %s", err))
 	}
 
-	// parse the flags for appropriate FlagSet
-	switch os.Args[1] {
-	case "login":
-		_ = loginCommand.Parse(os.Args[2:])
-	case "poll":
-		_ = pollCommand.Parse(os.Args[2:])
-	case "version":
-		fmt.Printf("version: %s, git: %s", buildVersion, buildGithash)
-	default:
-		flag.PrintDefaults()
-		os.Exit(1)
+	dataChannel := make(chan YammerOAuthAccessResponse, 1)
+	welcomeChannel := make(chan bool, 1)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/oauth/redirect", makeHandler(dataChannel))
+	mux.HandleFunc("/welcome", makeWelcomeHandler(welcomeChannel))
+
+	server := http.Server{
+		Addr:    ":8080",
+		Handler: mux,
 	}
 
-	// doLogin
-	if loginCommand.Parsed() {
-
-		// required Flags
-		if *loginClientId == "" {
-			loginCommand.Usage()
-			os.Exit(1)
-		}
-
-		// hand off to business logic
-		internal.SetToken(*loginClientId)
-	}
-
-	if pollCommand.Parsed() {
-
-		// get token from file
-		token := internal.GetToken()
-
-		// create a tmpdir dir where we store mug shot files
-		tmpdir, errTmp := ioutil.TempDir("", "goyammer")
-		if errTmp != nil {
-			log.Fatal().Msg(fmt.Sprintf("couldn't create tmpdir directory: %v", errTmp))
-		}
-		client := internal.NewClient(token)
-		users := internal.NewUsers(client, tmpdir)
-		messages := internal.NewMessages(client)
-		app := &app{users: users, messages: messages, tmpdir: tmpdir}
-		app.setupCloseHandler()
-
-		app.doPoll(*pollInterval)
-
-	}
-}
-
-// SetupCloseHandler creates a 'listener' on a new goroutine which will notify the
-// program if it receives an interrupt from the OS. We then handle this by calling
-// our clean up procedure and exiting the program.
-func (app *app) setupCloseHandler() {
-	c := make(chan os.Signal)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	// Start the server in a goroutine.
 	go func() {
-		<-c
-		fmt.Printf("\r")
-		log.Info().Msg(fmt.Sprintf("SIGTERM received - cleaning up and shutting down"))
-		errRm := os.RemoveAll(app.tmpdir)
-		if errRm != nil {
-			log.Fatal().Err(errRm).Msg(fmt.Sprintf("failed to remove temp dir %s", app.tmpdir))
+
+		if err := server.ListenAndServe(); err != http.ErrServerClosed {
+			fmt.Fprintf(os.Stdout, "Server start failed: %v\n", err)
 		}
-		os.Exit(0)
 	}()
+
+	authUrl := fmt.Sprintf("https://www.yammer.com/oauth2/authorize?client_id=%s&response_type=code&redirect_uri=http://localhost:8080/oauth/redirect", viper.GetString("clientID"))
+	fmt.Fprintf(os.Stdout, "please authorize at: %s\n", authUrl)
+
+	data := <-dataChannel
+	<-welcomeChannel
+
+	// Gracefully shutdown server (in a timeout context).
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		fmt.Fprintf(os.Stdout, "Server shutdown failed.\n")
+	}
+
+	fmt.Printf("FullName: %s, token: %s\n", data.User.FullName, data.AccessToken.Token)
+
 }
 
-func (app *app) doPoll(interval uint) {
-
-	log.Info().Msg(fmt.Sprint("goyamer started"))
-
-	sleepTime := time.Duration(interval) * time.Second
-	log.Info().Msg(fmt.Sprintf("* polling: every %s", sleepTime.String()))
-
-	// get the current user
-	var currentUser *internal.User
-	for {
-		user, errUser := app.users.GetUser(-1)
-		currentUser = user
-		if errUser == nil {
-			break
-		}
-		log.Warn().Err(errUser).Msg("failed to get current user")
-		time.Sleep(sleepTime)
-	}
-	log.Info().Msg(fmt.Sprintf("* user: %s", currentUser.FullName))
-	log.Info().Msg(fmt.Sprint("* groups:"))
-	for _, group := range *currentUser.Groups {
-		log.Info().Msg(fmt.Sprintf("  - %s", group.FullName))
-	}
-
-	// poll messages
-	for {
-		for _, group := range *currentUser.Groups {
-			gid := group.ID
-
-			newMessages, errNM := app.messages.GetNewMessages(gid)
-			if errNM != nil {
-				log.Warn().Err(errNM).Msg(fmt.Sprintf("failed to get new messages for group %s", group.FullName))
-			} else {
-				if len(newMessages) > 0 {
-					app.handleMessages(group.FullName, newMessages, currentUser)
-				}
-			}
-			time.Sleep(sleepTime)
-		}
-	}
-}
-
-func (app *app) handleMessages(groupName string, messages []*internal.Message, currentUser *internal.User) {
-
-	// regex matching newline newlines
-	re := regexp.MustCompile(`\r?\n`)
-
-	notified := false
-
-	// go through all messages from newest to oldest
-	for i := len(messages) - 1; i >= 0; i-- {
-
-		message := messages[i]
-
-		// get the sender
-		senderId := message.SenderID
-		user, errUser := app.users.GetUser(senderId)
-		if errUser != nil {
-			log.Warn().Err(errUser).Msg(fmt.Sprintf("failed to get user: %d", senderId))
-			continue
-		}
-
-		// if there is plain text in the message and we have a full name
-		if message.Body.Plain != "" && user.FullName != "" {
-
-			// construct and format the logLine
-			logLine := re.ReplaceAllString(message.Body.Plain, " ")
-			logLine = fmt.Sprintf("%s - %s | %s",
-				internal.ElipseMe(groupName, 6, true),
-				internal.ElipseMe(user.FullName, 6, true),
-				internal.ElipseMe(logLine, 50, false))
-
-			// log
-			log.Info().Msg(logLine)
-
-			// only if no message from the batch has been notified and message was not send by current user
-			if !notified && message.SenderID != currentUser.ID {
-
-				// get mugshot file
-				icon := "face-smile-big"
-				file, errMug := app.users.GetMugFile(user)
-				if errMug == nil {
-					icon = file.Name()
-				}
-
-				summary := user.FullName
-				body := message.Body.Plain
-				if len(messages) > 1 {
-					body = fmt.Sprintf("%s\n... and %d more", body, len(messages)-1)
-				}
-
-				internal.Notify(summary, body, icon)
-
-				notified = true
-			}
-		}
-
-	}
+// YammerOAuthAccessResponse is the data structure for captiuring the access token
+type YammerOAuthAccessResponse struct {
+	AccessToken struct {
+		UserID int    `json:"user_id"`
+		Token  string `json:"token"`
+	} `json:"access_token"`
+	User struct {
+		FullName string `json:"full_name"`
+	} `json:"user"`
 }
