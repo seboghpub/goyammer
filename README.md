@@ -9,7 +9,7 @@ Follow [this] guide to register a Yammer app and to optain a client ID.
 
 ## Login:
 
-First one needs to get a Yammer access token. Using:
+After an app has been registered, one needs to get a Yammer access token. Using:
 
 ~~~ {.bash}
 goyammer login --client <xyz>
