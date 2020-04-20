@@ -40,12 +40,12 @@ func main() {
 	pollCommand := flag.NewFlagSet("poll", flag.ExitOnError)
 
 	// subcommand flag pointers
-	loginClientId := loginCommand.String("id", "", "The client id. (Required)")
+	loginClientId := loginCommand.String("client", "", "The client ID. (Required)")
 	pollInterval := pollCommand.Uint("interval", 3, "The number of seconds to wait between request clientId. (Optional)")
 
 	// verify that a subcommand has been provided
 	if len(os.Args) < 2 {
-		log.Fatal().Msg("expected 'doLogin', 'poll' subcommand")
+		log.Fatal().Msg("expected 'login', 'poll', or 'version' subcommand")
 	}
 
 	// parse the flags for appropriate FlagSet
