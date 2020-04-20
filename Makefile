@@ -15,7 +15,7 @@ CWD := $(shell pwd)
 GO_FILES := $(wildcard internal/*.go main.go)
 
 BUILD_GITHASH := $(shell git rev-parse HEAD)
-BUILD_VERSION := 0.1.0
+BUILD_VERSION := 0.1.1
 DEB_VERSION   := $(BUILD_VERSION)
 DEB_NAME      := goyammer
 DEB_DIR_BASE  := debian
