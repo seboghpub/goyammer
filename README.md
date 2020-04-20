@@ -2,6 +2,10 @@
 
 Notify about new Yammer messages (private ones as well as messages in subscribed groups).
 
+## Register App
+
+Follow [this](https://developer.yammer.com/docs/app-registration) to register a Yammer app to optain a clientID.
+
 ## Login:
 
 First one needs to get a Yammer access token. Using:
