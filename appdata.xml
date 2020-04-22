@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop">
+  <id>goyammer</id>
+  <name>VLC</name>
+  <project_license>MIT</project_license>
+  <summary>goyammer ...</summary>
+  <description>
+    <p>goyammer does ...</p>
+  </description>
+  <provides>
+    <binary>goyammer</binary>
+  </provides>
+</component>

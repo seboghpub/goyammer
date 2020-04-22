@@ -47,6 +47,7 @@ $(DEB_DIR): goyammer Makefile
 	mkdir -p $(DEB_DIR)/usr/bin
 	mkdir -p $(DEB_DIR)/usr/share/doc/goyammer
 	mkdir -p $(DEB_DIR)/usr/share/man/man1/
+	mkdir -p $(DEB_DIR)/usr/share/metainfo/
 	@echo "$$DEB_CONTROL" > $(DEB_DIR)/DEBIAN/control
 	cp goyammer $(DEB_DIR)/usr/bin
 	strip --strip-unneeded --remove-section=.comment --remove-section=.note $(DEB_DIR)/usr/bin/goyammer
@@ -55,7 +56,7 @@ $(DEB_DIR): goyammer Makefile
 	gzip --best --no-name $(DEB_DIR)/usr/share/doc/goyammer/changelog
 	pandoc goyammer.1.md -s -t man -o $(DEB_DIR)/usr/share/man/man1/goyammer.1
 	gzip --best --no-name $(DEB_DIR)/usr/share/man/man1/goyammer.1
-
+	cp appdata.xml $(DEB_DIR)/usr/share/metainfo/goyammer.appdata.xml
 
 $(DEB_PACKAGE): $(DEB_DIR)
 	fakeroot dpkg-deb --build $(DEB_DIR)
