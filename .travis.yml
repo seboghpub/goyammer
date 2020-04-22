@@ -1,0 +1,33 @@
+dist: bionic
+
+language: go
+
+go:
+  - 1.12.x
+
+cache:
+  directories:
+    - $HOME/.cache/go-build
+    - $HOME/gopath/pkg/mod
+
+before_install:
+  - sudo apt-get update
+  - sudo apt-get -y install libnotify-dev pandoc fakeroot dpkg lintian
+
+install: true
+
+script: 
+  - make debbuild
+
+deploy:
+  provider: releases
+  api_key:
+    secure: "afUdf/KvWswCxCsW7RMq9TWS5xPDqJlPG5/hPnaUt/BXilhnQKKYZk6/QQ+BGRXxOGAG+Rab70tmHlgXZ35SIIwvXNDIthWgVBP+QWxZFR9KswPiZ0UBD/O9FBxdvgwJkeZv0BpX/JiYhXwq9T8DLn+mQzqS9Y9ay8bJmJGhQpDHlgnFxsiROBRPF6lr5xIhZHkJUKfxsmUjgWH2XNYMsnA6pHfhXK7ell0JV4NrwOOtDGpCeeUHoZmvfDRB/q8M/kO6p0KO0dxKmItWhn9sc9mCvlu6jh2/gERC36Udshf9L232j/WFUn/aqqcvq0TOh/1BDGoILlv1zcuIsavnpgaQ3cZ//ny4/Bj0lCsny+laTWEkSfL+8aQXnQ28UikuqTqkEZOE0E5arHh/Bof4fBRc6j2bwK2HZBlsNvXtNKPEoHngbC3yHwKjG2dfyVGmknsX/qu1lud3MgYTcvHNvIqJqVny0H0n4q9uUl3GxS/O4KVyKpFEaojcW7gnCTZTBdkh3hed24nwNi8GKieDCSCa7hBcvrhu6PjGJzPrrSwk/bDwZBcaH85+f15wjD0dXj5L+/v9KoH1lqYV3YqSbNj/R+1YlBG2tpQo9FBKYwZ1eihO5oI5nXP8s+zZKeDuGu23werGiqjuLO4KaqRQMcby0k0WQS5ZFYFnIUjFTWk="
+  file_glob: true
+  file: debian/*.deb
+  skip_cleanup: true
+  on:
+    branch: master
+    tags: true
+
+

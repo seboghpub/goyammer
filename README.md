@@ -1,5 +1,7 @@
 # goyammer
 
+[![Build Status](https://travis-ci.com/seboghpub/goyammer.svg?branch=master)](https://travis-ci.com/seboghpub/goyammer)
+
 Notify about new Yammer messages (private ones as well as messages in subscribed
 groups).
 
@@ -9,7 +11,7 @@ Follow [this] guide to register a Yammer app and to optain a client ID.
 
 ## Login:
 
-First one needs to get a Yammer access token. Using:
+After an app has been registered, one needs to get a Yammer access token. Using:
 
 ~~~ {.bash}
 goyammer login --client <xyz>
