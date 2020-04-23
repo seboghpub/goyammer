@@ -9,6 +9,7 @@ import (
 	"github.com/seboghpub/goyammer/internal"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"os/signal"
 	"regexp"
 	"syscall"
@@ -28,7 +29,10 @@ func main() {
 
 	// initialze logger
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
+	// a puristic console writer config
+	writer := zerolog.ConsoleWriter{Out: os.Stderr}
+	log.Logger = log.Output(writer)
 
 	// initialize go-notify
 	notify.Init("goyammer")
@@ -42,6 +46,8 @@ func main() {
 	// subcommand flag pointers
 	loginClientId := loginCommand.String("client", "", "The client ID. (Required)")
 	pollInterval := pollCommand.Uint("interval", 3, "The number of seconds to wait between request clientId. (Optional)")
+	pollDetached := pollCommand.Bool("detached", false, "Run in a detached mode (Optional)")
+	pollOutput := pollCommand.String("output", "", "Where to send output to (Optional)")
 
 	// verify that a subcommand has been provided
 	if len(os.Args) < 2 {
@@ -55,9 +61,9 @@ func main() {
 	case "poll":
 		_ = pollCommand.Parse(os.Args[2:])
 	case "version":
-		fmt.Printf("version: %s, git: %s", buildVersion, buildGithash)
+		log.Info().Msgf("version: %s, git: %s", buildVersion, buildGithash)
 	default:
-		flag.PrintDefaults()
+		log.Fatal().Msg("expected 'login', 'poll', or 'version' subcommand")
 		os.Exit(1)
 	}
 
@@ -76,14 +82,61 @@ func main() {
 
 	if pollCommand.Parsed() {
 
+		// if we should run detached
+		if *pollDetached {
+
+			// restart
+
+			// get cwd
+			cwd, errCwd := os.Getwd()
+			if errCwd != nil {
+				log.Fatal().Err(errCwd).Msg("failed to get cwd")
+			}
+
+			// create
+			var file *os.File
+			if *pollOutput != "" {
+				if !internal.FileExists(*pollOutput) {
+
+					// create the file
+					fileCreated, errCreate := os.Create(*pollOutput)
+					if errCreate != nil {
+						log.Fatal().Err(errCreate).Msgf("couldn't create %s", *pollOutput)
+					}
+					file = fileCreated
+					defer func() {
+						_ = file.Close()
+					}()
+				}
+			}
+
+			cmd := exec.Command(os.Args[0], "poll", "interval", string(*pollInterval))
+			cmd.Dir = cwd
+			cmd.Stdout = file
+			cmd.Stderr = file
+
+			errStart := cmd.Start()
+			if errStart != nil {
+				log.Fatal().Err(errCwd).Msg("failed to restart")
+			}
+			errRelease := cmd.Process.Release()
+			if errRelease != nil {
+				log.Fatal().Err(errRelease).Msg("failed to detach")
+			}
+			log.Info().Msg("detached")
+			//time.Sleep(2 * time.Second)
+			os.Exit(0)
+		}
+
 		// get token from file
 		token := internal.GetToken()
 
 		// create a tmpdir dir where we store mug shot files
-		tmpdir, errTmp := ioutil.TempDir("", "goyammer")
+		tmpdir, errTmp := ioutil.TempDir("", "goyammer-mugshots")
 		if errTmp != nil {
 			log.Fatal().Msg(fmt.Sprintf("couldn't create tmpdir directory: %v", errTmp))
 		}
+
 		client := internal.NewClient(token)
 		users := internal.NewUsers(client, tmpdir)
 		messages := internal.NewMessages(client)
@@ -91,7 +144,6 @@ func main() {
 		app.setupCloseHandler()
 
 		app.doPoll(*pollInterval)
-
 	}
 }
 
