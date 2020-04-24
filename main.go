@@ -25,6 +25,28 @@ type app struct {
 	tmpdir   string
 }
 
+type Command int
+
+const (
+	poll     Command = 0
+	detached Command = 1
+	login    Command = 2
+)
+
+func (cmd Command) string() string {
+	switch cmd {
+	case poll:
+		return "poll"
+	case detached:
+		return "detached"
+	case login:
+		return "login"
+	default:
+		log.Fatal().Msgf("unknown command %d", cmd)
+	}
+	return ""
+}
+
 func main() {
 
 	// initialze logger
@@ -40,92 +62,107 @@ func main() {
 	// see: https://blog.rapid7.com/2016/08/04/build-a-simple-cli-tool-with-golang/
 
 	// subcommands
-	loginCommand := flag.NewFlagSet("login", flag.ExitOnError)
-	pollCommand := flag.NewFlagSet("poll", flag.ExitOnError)
+	loginCommand := flag.NewFlagSet("", flag.ExitOnError)
+	pollCommand := flag.NewFlagSet("", flag.ExitOnError)
 
 	// subcommand flag pointers
 	loginClientId := loginCommand.String("client", "", "The client ID. (Required)")
 	pollInterval := pollCommand.Uint("interval", 3, "The number of seconds to wait between request clientId. (Optional)")
-	pollDetached := pollCommand.Bool("detached", false, "Run in a detached mode (Optional)")
 	pollOutput := pollCommand.String("output", "", "Where to send output to (Optional)")
 
-	// verify that a subcommand has been provided
-	if len(os.Args) < 2 {
-		log.Fatal().Msg("expected 'login', 'poll', or 'version' subcommand")
+	// parse the commandline
+	var command = poll
+	var flagArgs []string
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case login.string():
+			command = login
+			flagArgs = os.Args[2:]
+		case poll.string():
+			flagArgs = os.Args[2:]
+		case detached.string():
+			command = detached
+			flagArgs = os.Args[2:]
+		default:
+			flagArgs = os.Args[1:]
+		}
 	}
 
-	// parse the flags for appropriate FlagSet
-	switch os.Args[1] {
-	case "login":
-		_ = loginCommand.Parse(os.Args[2:])
-	case "poll":
-		_ = pollCommand.Parse(os.Args[2:])
-	case "version":
-		log.Info().Msgf("version: %s, git: %s", buildVersion, buildGithash)
-	default:
-		log.Fatal().Msg("expected 'login', 'poll', or 'version' subcommand")
-		os.Exit(1)
-	}
+	// depending on the command
+	switch command {
+	case login:
 
-	// doLogin
-	if loginCommand.Parsed() {
+		// parse flags
+		errFlags := loginCommand.Parse(flagArgs)
+		if errFlags != nil {
+			log.Fatal().Err(errFlags).Msgf("failed to parse command line for '%s' subcommand", login.string())
+		}
 
-		// required Flags
+		// ensure required flags
 		if *loginClientId == "" {
-			loginCommand.Usage()
+			log.Fatal().Msg("missing '--client' parameter")
 			os.Exit(1)
 		}
 
 		// hand off to business logic
 		internal.SetToken(*loginClientId)
-	}
 
-	if pollCommand.Parsed() {
+	case poll:
 
-		// if we should run detached
-		if *pollDetached {
+		// parse flags
+		errFlags := pollCommand.Parse(flagArgs)
+		if errFlags != nil {
+			log.Fatal().Err(errFlags).Msgf("failed to parse command line for '%s' subcommand", poll.string())
+		}
 
-			// restart
+		// get cwd
+		cwd, errCwd := os.Getwd()
+		if errCwd != nil {
+			log.Fatal().Err(errCwd).Msg("failed to get cwd")
+		}
 
-			// get cwd
-			cwd, errCwd := os.Getwd()
-			if errCwd != nil {
-				log.Fatal().Err(errCwd).Msg("failed to get cwd")
+		// construct a file for connecting STDERR and STDOUT of the child, if pollOutput is given
+		var file *os.File
+		if *pollOutput != "" {
+
+			f, err := os.OpenFile(*pollOutput, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+			if err != nil {
+				log.Fatal().Err(err).Msgf("couldn't open %s", *pollOutput)
 			}
+			file = f
+			defer func() {
+				_ = f.Close()
+			}()
 
-			// create
-			var file *os.File
-			if *pollOutput != "" {
-				if !internal.FileExists(*pollOutput) {
+		}
 
-					// create the file
-					fileCreated, errCreate := os.Create(*pollOutput)
-					if errCreate != nil {
-						log.Fatal().Err(errCreate).Msgf("couldn't create %s", *pollOutput)
-					}
-					file = fileCreated
-					defer func() {
-						_ = file.Close()
-					}()
-				}
-			}
+		// construct the command
+		detachedFlags := append([]string{detached.string()}, flagArgs...)
+		cmd := exec.Command(os.Args[0], detachedFlags...)
+		cmd.Dir = cwd
+		cmd.Stdout = file
+		cmd.Stderr = file
 
-			cmd := exec.Command(os.Args[0], "poll", "interval", string(*pollInterval))
-			cmd.Dir = cwd
-			cmd.Stdout = file
-			cmd.Stderr = file
+		errStart := cmd.Start()
+		if errStart != nil {
+			log.Fatal().Err(errCwd).Msg("failed to restart")
+		}
 
-			errStart := cmd.Start()
-			if errStart != nil {
-				log.Fatal().Err(errCwd).Msg("failed to restart")
-			}
-			errRelease := cmd.Process.Release()
-			if errRelease != nil {
-				log.Fatal().Err(errRelease).Msg("failed to detach")
-			}
-			log.Info().Msg("detached")
-			//time.Sleep(2 * time.Second)
-			os.Exit(0)
+		pid := cmd.Process.Pid
+
+		errRelease := cmd.Process.Release()
+		if errRelease != nil {
+			log.Fatal().Err(errRelease).Msg("failed to detach")
+		}
+
+		log.Info().Int("PID", pid).Str("logfile", *pollOutput).Msgf("detached")
+
+	case detached:
+
+		// parse flags
+		errFlags := pollCommand.Parse(flagArgs)
+		if errFlags != nil {
+			log.Fatal().Err(errFlags).Msgf("failed to parse command line for '%s' subcommand", detached.string())
 		}
 
 		// get token from file
@@ -144,6 +181,7 @@ func main() {
 		app.setupCloseHandler()
 
 		app.doPoll(*pollInterval)
+
 	}
 }
 
@@ -155,7 +193,7 @@ func (app *app) setupCloseHandler() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		fmt.Printf("\r")
+		//fmt.Printf("\r")
 		log.Info().Msg(fmt.Sprintf("SIGTERM received - cleaning up and shutting down"))
 		errRm := os.RemoveAll(app.tmpdir)
 		if errRm != nil {
