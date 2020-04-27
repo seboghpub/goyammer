@@ -40,3 +40,19 @@ one starts the polling and notification.
 
   [this]: https://developer.yammer.com/docs/app-registration
   [goyammer]: screenshot.png
+
+## Install
+
+Build it yourself or simply install the released .deb package.
+
+For autostarting run:
+
+```
+gnome-session-properties
+```
+
+and add an entry like:
+
+```
+goyammer --output ~/goyammer.log
+```
