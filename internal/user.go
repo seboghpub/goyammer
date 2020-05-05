@@ -110,7 +110,7 @@ func (users *Users) GetMugFile(user *User) (*os.File, error) {
 		return user.mugFile, nil
 	}
 	file, errDump := users.DumpMugToFile(user)
-	if errDump == nil {
+	if errDump != nil {
 		return nil, fmt.Errorf("failed to dump mug: %v", errDump)
 	}
 	user.mugFile = file
