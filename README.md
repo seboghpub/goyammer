@@ -29,10 +29,12 @@ Note, this only needs to be done once.
 Using:
 
 ~~~ {.bash}
-goyammer poll [--interval <seconds>]
+goyammer [poll] [--interval <seconds>]
 ~~~
 
-one starts the polling and notification.
+one starts the polling and notification. 
+
+Note, by default, when polling, goyammer will "fork" itself and detach from the terminal.
 
 ## Screenshot
 
@@ -54,5 +56,5 @@ gnome-session-properties
 and add an entry like:
 
 ```
-goyammer --output ~/goyammer.log
+/usr/bin/goyammer detached --output /home/sebo/goyammer.log
 ```
