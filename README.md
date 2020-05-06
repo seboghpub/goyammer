@@ -1,6 +1,6 @@
 # goyammer
 
-[![Build Status](https://travis-ci.com/seboghpub/goyammer.svg?branch=master)](https://travis-ci.com/seboghpub/goyammer)
+[![Build Status]]
 
 Notify about new Yammer messages (private ones as well as messages in subscribed
 groups).
@@ -13,9 +13,7 @@ Follow [this] guide to register a Yammer app and to optain a client ID.
 
 After an app has been registered, one needs to get a Yammer access token. Using:
 
-~~~ {.bash}
-goyammer login --client <xyz>
-~~~
+    goyammer login --client <xyz>
 
 where `xyz` must be replaced with the client ID.
 
@@ -28,20 +26,16 @@ Note, this only needs to be done once.
 
 Using:
 
-~~~ {.bash}
-goyammer [poll] [--interval <seconds>]
-~~~
+    goyammer [poll] [--interval <seconds>]
 
-one starts the polling and notification. 
+one starts the polling and notification.
 
-Note, by default, when polling, goyammer will "fork" itself and detach from the terminal.
+Note, by default, when polling, goyammer will “fork” itself and detach from the
+terminal.
 
 ## Screenshot
 
 ![goyammer]
-
-  [this]: https://developer.yammer.com/docs/app-registration
-  [goyammer]: screenshot.png
 
 ## Install
 
@@ -49,12 +43,13 @@ Build it yourself or simply install the released .deb package.
 
 For autostarting run:
 
-```
-gnome-session-properties
-```
+    gnome-session-properties
 
 and add an entry like:
 
-```
-/usr/bin/goyammer detached --output /home/sebo/goyammer.log
-```
+    /usr/bin/goyammer detached --output /home/sebo/goyammer.log
+
+  [Build Status]: https://travis-ci.com/seboghpub/goyammer.svg?branch=master
+  [![Build Status]]: https://travis-ci.com/seboghpub/goyammer
+  [this]: https://developer.yammer.com/docs/app-registration
+  [goyammer]: screenshot.png
