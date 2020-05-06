@@ -1,13 +1,14 @@
 # goyammer
 
-[![Build Status]]
+[![Build Status](https://travis-ci.com/seboghpub/goyammer.svg?branch=master)](https://travis-ci.com/seboghpub/goyammer)
 
 Notify about new Yammer messages (private ones as well as messages in subscribed
 groups).
 
 ## Register App
 
-Follow [this] guide to register a Yammer app and to optain a client ID.
+Follow [this](https://developer.yammer.com/docs/app-registration) guide to
+register a Yammer app and to optain a client ID.
 
 ## Login:
 
@@ -35,7 +36,7 @@ terminal.
 
 ## Screenshot
 
-![goyammer]
+![goyammer](screenshot.png)
 
 ## Install
 
@@ -49,9 +50,11 @@ and add an entry like:
 
     /usr/bin/goyammer detached --output /home/sebo/goyammer.log
 
-<!-- eot -->
-
-  [Build Status]: https://travis-ci.com/seboghpub/goyammer.svg?branch=master
-  [![Build Status]]: https://travis-ci.com/seboghpub/goyammer
-  [this]: https://developer.yammer.com/docs/app-registration
-  [goyammer]: screenshot.png
+<!--
+# Local Variables:
+# mode: markdown
+# ispell-local-dictionary: "english"
+# eval: (flyspell-mode 1)
+# coding: utf-8
+# End:
+-->
