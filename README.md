@@ -49,6 +49,8 @@ and add an entry like:
 
     /usr/bin/goyammer detached --output /home/sebo/goyammer.log
 
+<!-- eot -->
+
   [Build Status]: https://travis-ci.com/seboghpub/goyammer.svg?branch=master
   [![Build Status]]: https://travis-ci.com/seboghpub/goyammer
   [this]: https://developer.yammer.com/docs/app-registration
