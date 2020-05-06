@@ -48,7 +48,10 @@ For autostarting run:
 
 and add an entry like:
 
-    /usr/bin/goyammer detached --output /home/sebo/goyammer.log
+    /usr/bin/goyammer --output /home/sebo/goyammer.log
+
+(which will create `~/.config/autostart/goyammer.desktop`)
+
 
 <!--
 # Local Variables:
