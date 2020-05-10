@@ -31,6 +31,7 @@ const (
 	poll     Command = 0
 	detached Command = 1
 	login    Command = 2
+	version  Command = 3
 )
 
 func (cmd Command) string() string {
@@ -41,6 +42,8 @@ func (cmd Command) string() string {
 		return "detached"
 	case login:
 		return "login"
+	case version:
+		return "version"
 	default:
 		log.Fatal().Msgf("unknown command %d", cmd)
 	}
@@ -83,6 +86,8 @@ func main() {
 		case detached.string():
 			command = detached
 			flagArgs = os.Args[2:]
+		case version.string():
+			command = version
 		default:
 			flagArgs = os.Args[1:]
 		}
@@ -90,6 +95,10 @@ func main() {
 
 	// depending on the command
 	switch command {
+	case version:
+
+		log.Info().Str("version", buildVersion).Str("githash", buildGithash).Msg("goyammer")
+
 	case login:
 
 		// parse flags
