@@ -55,6 +55,10 @@ $(DEB_DIR): goyammer Makefile
 	gzip --best --no-name $(DEB_DIR)/usr/share/doc/goyammer/changelog
 	pandoc goyammer.1.md -s -t man -o $(DEB_DIR)/usr/share/man/man1/goyammer.1
 	gzip --best --no-name $(DEB_DIR)/usr/share/man/man1/goyammer.1
+	pandoc goyammer-login.1.md -s -t man -o $(DEB_DIR)/usr/share/man/man1/goyammer-login.1
+	gzip --best --no-name $(DEB_DIR)/usr/share/man/man1/goyammer-login.1
+	pandoc goyammer-poll.1.md -s -t man -o $(DEB_DIR)/usr/share/man/man1/goyammer-poll.1
+	gzip --best --no-name $(DEB_DIR)/usr/share/man/man1/goyammer-poll.1
 
 
 $(DEB_PACKAGE): $(DEB_DIR)
