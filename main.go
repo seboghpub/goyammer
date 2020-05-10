@@ -27,25 +27,38 @@ type app struct {
 
 type Command int
 
+const USAGE_MSG = `
+usage: goyammer <command> [<args>]
+
+commands:
+  login      Login to Yammer and get an access token.
+  poll       Poll for new messages and notify.  
+  version    Display version infos.
+  help       Display usage message.
+`
+
 const (
-	poll     Command = 0
-	detached Command = 1
-	login    Command = 2
-	version  Command = 3
+	POLL     Command = 0
+	DETACHED Command = 1
+	LOGIN    Command = 2
+	VERSION  Command = 3
+	HELP     Command = 4
 )
 
 func (cmd Command) string() string {
 	switch cmd {
-	case poll:
+	case POLL:
 		return "poll"
-	case detached:
+	case DETACHED:
 		return "detached"
-	case login:
+	case LOGIN:
 		return "login"
-	case version:
+	case VERSION:
 		return "version"
+	case HELP:
+		return "help"
 	default:
-		log.Fatal().Msgf("unknown command %d", cmd)
+		log.Fatal().Msgf("unknown command %d.\n", cmd)
 	}
 	return ""
 }
@@ -74,20 +87,22 @@ func main() {
 	pollOutput := pollCommand.String("output", "", "Where to send output to (Optional)")
 
 	// parse the commandline
-	var command = poll
+	var command = POLL
 	var flagArgs []string
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case login.string():
-			command = login
+		case LOGIN.string():
+			command = LOGIN
 			flagArgs = os.Args[2:]
-		case poll.string():
+		case POLL.string():
 			flagArgs = os.Args[2:]
-		case detached.string():
-			command = detached
+		case DETACHED.string():
+			command = DETACHED
 			flagArgs = os.Args[2:]
-		case version.string():
-			command = version
+		case VERSION.string():
+			command = VERSION
+		case HELP.string():
+			command = HELP
 		default:
 			flagArgs = os.Args[1:]
 		}
@@ -95,16 +110,20 @@ func main() {
 
 	// depending on the command
 	switch command {
-	case version:
+	case VERSION:
 
-		log.Info().Str("version", buildVersion).Str("githash", buildGithash).Msg("goyammer")
+		fmt.Printf("goyammer version %s git %s", buildVersion, buildGithash)
 
-	case login:
+	case HELP:
+
+		fmt.Print(USAGE_MSG)
+
+	case LOGIN:
 
 		// parse flags
 		errFlags := loginCommand.Parse(flagArgs)
 		if errFlags != nil {
-			log.Fatal().Err(errFlags).Msgf("failed to parse command line for '%s' subcommand", login.string())
+			log.Fatal().Err(errFlags).Msgf("failed to parse command line for '%s' subcommand", LOGIN.string())
 		}
 
 		// ensure required flags
@@ -116,12 +135,12 @@ func main() {
 		// hand off to business logic
 		internal.SetToken(*loginClientId)
 
-	case poll:
+	case POLL:
 
 		// parse flags
 		errFlags := pollCommand.Parse(flagArgs)
 		if errFlags != nil {
-			log.Fatal().Err(errFlags).Msgf("failed to parse command line for '%s' subcommand", poll.string())
+			log.Fatal().Err(errFlags).Msgf("failed to parse command line for '%s' subcommand", POLL.string())
 		}
 
 		// get cwd
@@ -146,7 +165,7 @@ func main() {
 		}
 
 		// construct the command
-		detachedFlags := append([]string{detached.string()}, flagArgs...)
+		detachedFlags := append([]string{DETACHED.string()}, flagArgs...)
 		cmd := exec.Command(os.Args[0], detachedFlags...)
 		cmd.Dir = cwd
 		cmd.Stdout = file
@@ -164,14 +183,14 @@ func main() {
 			log.Fatal().Err(errRelease).Msg("failed to detach")
 		}
 
-		log.Info().Int("PID", pid).Str("logfile", *pollOutput).Msgf("detached")
+		log.Info().Int("PID", pid).Str("logfile", *pollOutput).Msgf("DETACHED")
 
-	case detached:
+	case DETACHED:
 
 		// parse flags
 		errFlags := pollCommand.Parse(flagArgs)
 		if errFlags != nil {
-			log.Fatal().Err(errFlags).Msgf("failed to parse command line for '%s' subcommand", detached.string())
+			log.Fatal().Err(errFlags).Msgf("failed to parse command line for '%s' subcommand", DETACHED.string())
 		}
 
 		// get token from file
@@ -241,7 +260,7 @@ func (app *app) doPoll(interval uint) {
 		fmt.Sprintf("Listening on %d groups for user %s.", len(*currentUser.Groups), currentUser.FullName),
 		"face-smile-big")
 
-	// poll messages
+	// POLL messages
 	for {
 		for _, group := range *currentUser.Groups {
 			gid := group.ID
