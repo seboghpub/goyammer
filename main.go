@@ -227,6 +227,11 @@ func (app *app) doPoll(interval uint) {
 		log.Info().Msg(fmt.Sprintf("  - %s", group.FullName))
 	}
 
+	internal.Notify(
+		"goyammer",
+		fmt.Sprintf("Listening on %d groups for user %s.", len(*currentUser.Groups), currentUser.FullName),
+		"face-smile-big")
+
 	// poll messages
 	for {
 		for _, group := range *currentUser.Groups {
