@@ -38,19 +38,16 @@ commands:
 `
 
 const (
-	POLL     Command = 0
-	DETACHED Command = 1
-	LOGIN    Command = 2
-	VERSION  Command = 3
-	HELP     Command = 4
+	POLL    Command = 0
+	LOGIN   Command = 1
+	VERSION Command = 2
+	HELP    Command = 3
 )
 
 func (cmd Command) string() string {
 	switch cmd {
 	case POLL:
 		return "poll"
-	case DETACHED:
-		return "detached"
 	case LOGIN:
 		return "login"
 	case VERSION:
@@ -85,6 +82,7 @@ func main() {
 	loginClientId := loginCommand.String("client", "", "The client ID. (Required)")
 	pollInterval := pollCommand.Uint("interval", 3, "The number of seconds to wait between request clientId. (Optional)")
 	pollOutput := pollCommand.String("output", "", "Where to send output to (Optional)")
+	pollForeground := pollCommand.Bool("foreground", false, "Run in foreground (Optional)")
 
 	// parse the commandline
 	var command = POLL
@@ -95,9 +93,6 @@ func main() {
 			command = LOGIN
 			flagArgs = os.Args[2:]
 		case POLL.string():
-			flagArgs = os.Args[2:]
-		case DETACHED.string():
-			command = DETACHED
 			flagArgs = os.Args[2:]
 		case VERSION.string():
 			command = VERSION
@@ -143,73 +138,75 @@ func main() {
 			log.Fatal().Err(errFlags).Msgf("failed to parse command line for '%s' subcommand", POLL.string())
 		}
 
-		// get cwd
-		cwd, errCwd := os.Getwd()
-		if errCwd != nil {
-			log.Fatal().Err(errCwd).Msg("failed to get cwd")
-		}
+		// unless foreground is set
+		if !*pollForeground {
 
-		// construct a file for connecting STDERR and STDOUT of the child, if pollOutput is given
-		var file *os.File
-		if *pollOutput != "" {
+			// restart in a detached mode
 
-			f, err := os.OpenFile(*pollOutput, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
-			if err != nil {
-				log.Fatal().Err(err).Msgf("couldn't open %s", *pollOutput)
+			// get cwd
+			cwd, errCwd := os.Getwd()
+			if errCwd != nil {
+				log.Fatal().Err(errCwd).Msg("failed to get cwd")
 			}
-			file = f
-			defer func() {
-				_ = f.Close()
-			}()
+
+			// construct a file for connecting STDERR and STDOUT of the child, if pollOutput is given
+			var file *os.File
+			if *pollOutput != "" {
+
+				f, err := os.OpenFile(*pollOutput, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+				if err != nil {
+					log.Fatal().Err(err).Msgf("couldn't open %s", *pollOutput)
+				}
+				file = f
+				defer func() {
+					_ = f.Close()
+				}()
+
+			}
+
+			// construct the command
+			detachedFlags := append([]string{POLL.string(), "--foreground"}, flagArgs...)
+			cmd := exec.Command(os.Args[0], detachedFlags...)
+			cmd.Dir = cwd
+			cmd.Stdout = file
+			cmd.Stderr = file
+
+			errStart := cmd.Start()
+			if errStart != nil {
+				log.Fatal().Err(errCwd).Msg("failed to restart")
+			}
+
+			pid := cmd.Process.Pid
+
+			errRelease := cmd.Process.Release()
+			if errRelease != nil {
+				log.Fatal().Err(errRelease).Msg("failed to detach")
+			}
+
+			log.Info().Int("PID", pid).Str("logfile", *pollOutput).Msgf("DETACHED")
+
+		} else {
+
+			// start in the foreground
+
+			// get token from file
+			token := internal.GetToken()
+
+			// create a tmpdir dir where we store mug shot files
+			tmpdir, errTmp := ioutil.TempDir("", "goyammer-mugshots")
+			if errTmp != nil {
+				log.Fatal().Msg(fmt.Sprintf("couldn't create tmpdir directory: %v", errTmp))
+			}
+
+			client := internal.NewClient(token)
+			users := internal.NewUsers(client, tmpdir)
+			messages := internal.NewMessages(client)
+			app := &app{users: users, messages: messages, tmpdir: tmpdir}
+			app.setupCloseHandler()
+
+			app.doPoll(*pollInterval)
 
 		}
-
-		// construct the command
-		detachedFlags := append([]string{DETACHED.string()}, flagArgs...)
-		cmd := exec.Command(os.Args[0], detachedFlags...)
-		cmd.Dir = cwd
-		cmd.Stdout = file
-		cmd.Stderr = file
-
-		errStart := cmd.Start()
-		if errStart != nil {
-			log.Fatal().Err(errCwd).Msg("failed to restart")
-		}
-
-		pid := cmd.Process.Pid
-
-		errRelease := cmd.Process.Release()
-		if errRelease != nil {
-			log.Fatal().Err(errRelease).Msg("failed to detach")
-		}
-
-		log.Info().Int("PID", pid).Str("logfile", *pollOutput).Msgf("DETACHED")
-
-	case DETACHED:
-
-		// parse flags
-		errFlags := pollCommand.Parse(flagArgs)
-		if errFlags != nil {
-			log.Fatal().Err(errFlags).Msgf("failed to parse command line for '%s' subcommand", DETACHED.string())
-		}
-
-		// get token from file
-		token := internal.GetToken()
-
-		// create a tmpdir dir where we store mug shot files
-		tmpdir, errTmp := ioutil.TempDir("", "goyammer-mugshots")
-		if errTmp != nil {
-			log.Fatal().Msg(fmt.Sprintf("couldn't create tmpdir directory: %v", errTmp))
-		}
-
-		client := internal.NewClient(token)
-		users := internal.NewUsers(client, tmpdir)
-		messages := internal.NewMessages(client)
-		app := &app{users: users, messages: messages, tmpdir: tmpdir}
-		app.setupCloseHandler()
-
-		app.doPoll(*pollInterval)
-
 	}
 }
 
