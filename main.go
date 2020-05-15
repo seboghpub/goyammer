@@ -9,6 +9,7 @@ import (
 	"github.com/seboghpub/goyammer/internal"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"os/signal"
 	"regexp"
 	"syscall"
@@ -24,11 +25,49 @@ type app struct {
 	tmpdir   string
 }
 
+type Command int
+
+const USAGE_MSG = `
+usage: goyammer <command> [<args>]
+
+commands:
+  login      Login to Yammer and get an access token.
+  poll       Poll for new messages and notify.  
+  version    Display version infos.
+  help       Display usage message.
+`
+
+const (
+	POLL    Command = 0
+	LOGIN   Command = 1
+	VERSION Command = 2
+	HELP    Command = 3
+)
+
+func (cmd Command) string() string {
+	switch cmd {
+	case POLL:
+		return "poll"
+	case LOGIN:
+		return "login"
+	case VERSION:
+		return "version"
+	case HELP:
+		return "help"
+	default:
+		log.Fatal().Msgf("unknown command %d.\n", cmd)
+	}
+	return ""
+}
+
 func main() {
 
 	// initialze logger
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
+	// a puristic console writer config
+	writer := zerolog.ConsoleWriter{Out: os.Stderr}
+	log.Logger = log.Output(writer)
 
 	// initialize go-notify
 	notify.Init("goyammer")
@@ -36,62 +75,138 @@ func main() {
 	// see: https://blog.rapid7.com/2016/08/04/build-a-simple-cli-tool-with-golang/
 
 	// subcommands
-	loginCommand := flag.NewFlagSet("login", flag.ExitOnError)
-	pollCommand := flag.NewFlagSet("poll", flag.ExitOnError)
+	loginCommand := flag.NewFlagSet("", flag.ExitOnError)
+	pollCommand := flag.NewFlagSet("", flag.ExitOnError)
 
 	// subcommand flag pointers
 	loginClientId := loginCommand.String("client", "", "The client ID. (Required)")
 	pollInterval := pollCommand.Uint("interval", 3, "The number of seconds to wait between request clientId. (Optional)")
+	pollOutput := pollCommand.String("output", "", "Where to send output to (Optional)")
+	pollForeground := pollCommand.Bool("foreground", false, "Run in foreground (Optional)")
 
-	// verify that a subcommand has been provided
-	if len(os.Args) < 2 {
-		log.Fatal().Msg("expected 'login', 'poll', or 'version' subcommand")
+	// parse the commandline
+	var command = POLL
+	var flagArgs []string
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case LOGIN.string():
+			command = LOGIN
+			flagArgs = os.Args[2:]
+		case POLL.string():
+			flagArgs = os.Args[2:]
+		case VERSION.string():
+			command = VERSION
+		case HELP.string():
+			command = HELP
+		default:
+			flagArgs = os.Args[1:]
+		}
 	}
 
-	// parse the flags for appropriate FlagSet
-	switch os.Args[1] {
-	case "login":
-		_ = loginCommand.Parse(os.Args[2:])
-	case "poll":
-		_ = pollCommand.Parse(os.Args[2:])
-	case "version":
-		fmt.Printf("version: %s, git: %s", buildVersion, buildGithash)
-	default:
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
+	// depending on the command
+	switch command {
+	case VERSION:
 
-	// doLogin
-	if loginCommand.Parsed() {
+		fmt.Printf("goyammer version %s git %s", buildVersion, buildGithash)
 
-		// required Flags
+	case HELP:
+
+		fmt.Print(USAGE_MSG)
+
+	case LOGIN:
+
+		// parse flags
+		errFlags := loginCommand.Parse(flagArgs)
+		if errFlags != nil {
+			log.Fatal().Err(errFlags).Msgf("failed to parse command line for '%s' subcommand", LOGIN.string())
+		}
+
+		// ensure required flags
 		if *loginClientId == "" {
-			loginCommand.Usage()
+			log.Fatal().Msg("missing '--client' parameter")
 			os.Exit(1)
 		}
 
 		// hand off to business logic
 		internal.SetToken(*loginClientId)
-	}
 
-	if pollCommand.Parsed() {
+	case POLL:
 
-		// get token from file
-		token := internal.GetToken()
-
-		// create a tmpdir dir where we store mug shot files
-		tmpdir, errTmp := ioutil.TempDir("", "goyammer")
-		if errTmp != nil {
-			log.Fatal().Msg(fmt.Sprintf("couldn't create tmpdir directory: %v", errTmp))
+		// parse flags
+		errFlags := pollCommand.Parse(flagArgs)
+		if errFlags != nil {
+			log.Fatal().Err(errFlags).Msgf("failed to parse command line for '%s' subcommand", POLL.string())
 		}
-		client := internal.NewClient(token)
-		users := internal.NewUsers(client, tmpdir)
-		messages := internal.NewMessages(client)
-		app := &app{users: users, messages: messages, tmpdir: tmpdir}
-		app.setupCloseHandler()
 
-		app.doPoll(*pollInterval)
+		// unless foreground is set
+		if !*pollForeground {
 
+			// restart in a detached mode
+
+			// get cwd
+			cwd, errCwd := os.Getwd()
+			if errCwd != nil {
+				log.Fatal().Err(errCwd).Msg("failed to get cwd")
+			}
+
+			// construct a file for connecting STDERR and STDOUT of the child, if pollOutput is given
+			var file *os.File
+			if *pollOutput != "" {
+
+				f, err := os.OpenFile(*pollOutput, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+				if err != nil {
+					log.Fatal().Err(err).Msgf("couldn't open %s", *pollOutput)
+				}
+				file = f
+				defer func() {
+					_ = f.Close()
+				}()
+
+			}
+
+			// construct the command
+			detachedFlags := append([]string{POLL.string(), "--foreground"}, flagArgs...)
+			cmd := exec.Command(os.Args[0], detachedFlags...)
+			cmd.Dir = cwd
+			cmd.Stdout = file
+			cmd.Stderr = file
+
+			errStart := cmd.Start()
+			if errStart != nil {
+				log.Fatal().Err(errCwd).Msg("failed to restart")
+			}
+
+			pid := cmd.Process.Pid
+
+			errRelease := cmd.Process.Release()
+			if errRelease != nil {
+				log.Fatal().Err(errRelease).Msg("failed to detach")
+			}
+
+			log.Info().Int("PID", pid).Str("logfile", *pollOutput).Msgf("DETACHED")
+
+		} else {
+
+			// start in the foreground
+
+			// get token from file
+			token := internal.GetToken()
+
+			// create a tmpdir dir where we store mug shot files
+			tmpdir, errTmp := ioutil.TempDir("", "goyammer-mugshots")
+			if errTmp != nil {
+				log.Fatal().Msg(fmt.Sprintf("couldn't create tmpdir directory: %v", errTmp))
+			}
+
+			client := internal.NewClient(token)
+			users := internal.NewUsers(client, tmpdir)
+			messages := internal.NewMessages(client)
+			app := &app{users: users, messages: messages, tmpdir: tmpdir}
+			app.setupCloseHandler()
+
+			app.doPoll(*pollInterval)
+
+		}
 	}
 }
 
@@ -103,7 +218,7 @@ func (app *app) setupCloseHandler() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		fmt.Printf("\r")
+		//fmt.Printf("\r")
 		log.Info().Msg(fmt.Sprintf("SIGTERM received - cleaning up and shutting down"))
 		errRm := os.RemoveAll(app.tmpdir)
 		if errRm != nil {
@@ -137,7 +252,12 @@ func (app *app) doPoll(interval uint) {
 		log.Info().Msg(fmt.Sprintf("  - %s", group.FullName))
 	}
 
-	// poll messages
+	internal.Notify(
+		"goyammer",
+		fmt.Sprintf("Listening on %d groups for user %s.", len(*currentUser.Groups), currentUser.FullName),
+		"face-smile-big")
+
+	// POLL messages
 	for {
 		for _, group := range *currentUser.Groups {
 			gid := group.ID
