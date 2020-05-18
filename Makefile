@@ -12,7 +12,7 @@ PATH := $(GOPATH)/bin:$(PATH)
 CWD := $(shell pwd)
 
 # Collect all golang files in the current directory.
-GO_FILES := $(wildcard internal/*.go main.go)
+GO_FILES := $(wildcard internal/*.go icon/*.go main.go)
 
 BUILD_GITHASH := $(shell git rev-parse HEAD)
 BUILD_VERSION := $(shell git describe --tags | grep -P -o '(?<=v)[0-9]+.[0-9]+.[0-9]')
@@ -35,6 +35,9 @@ endef
 export DEB_CONTROL
 
 all: goyammer
+
+icons: ./icon/*.png
+	cd ./icon; ./build.sh
 
 goyammer: $(GO_FILES) Makefile
 	GO111MODULE=on CGO_ENABLED=1 GOOS=linux go build \
@@ -82,4 +85,4 @@ tidy: clean
 	rm -f $(DEB_PACKAGE)
 
 
-.PHONY: all clean tidy debbuild showdebs
+.PHONY: all clean tidy debbuild showdebs icons
