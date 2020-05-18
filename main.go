@@ -3,10 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/mqu/go-notify"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
-	"github.com/seboghpub/goyammer/internal"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -14,6 +10,12 @@ import (
 	"regexp"
 	"syscall"
 	"time"
+
+	"github.com/getlantern/systray"
+	"github.com/mqu/go-notify"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"github.com/seboghpub/goyammer/internal"
 )
 
 var buildVersion = "to be set by linker"
@@ -204,7 +206,10 @@ func main() {
 			app := &app{users: users, messages: messages, tmpdir: tmpdir}
 			app.setupCloseHandler()
 
-			app.doPoll(*pollInterval)
+			systray.Run(func() {
+				internal.Systray_init()
+				app.doPoll(*pollInterval)
+			}, func() {})
 
 		}
 	}
@@ -230,7 +235,7 @@ func (app *app) setupCloseHandler() {
 
 func (app *app) doPoll(interval uint) {
 
-	log.Info().Msg(fmt.Sprint("goyamer started"))
+	log.Info().Msg(fmt.Sprint("goyammer started"))
 
 	sleepTime := time.Duration(interval) * time.Second
 	log.Info().Msg(fmt.Sprintf("* polling: every %s", sleepTime.String()))
@@ -260,6 +265,7 @@ func (app *app) doPoll(interval uint) {
 	// POLL messages
 	for {
 		for _, group := range *currentUser.Groups {
+			internal.Systray_poll()
 			gid := group.ID
 
 			newMessages, errNM := app.messages.GetNewMessages(gid)
@@ -270,6 +276,7 @@ func (app *app) doPoll(interval uint) {
 					app.handleMessages(group.FullName, newMessages, currentUser)
 				}
 			}
+			internal.Systray_reset()
 			time.Sleep(sleepTime)
 		}
 	}
