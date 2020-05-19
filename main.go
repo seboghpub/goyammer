@@ -339,9 +339,9 @@ func (app *app) handleMessages(groupName string, messages []*internal.Message, c
 				}
 
 				summary := user.FullName
-				body := message.Body.Plain
+				body := fmt.Sprintf("%s\n\n%s", message.Body.Plain, message.WebUrl)
 				if len(messages) > 1 {
-					body = fmt.Sprintf("%s\n... and %d more", body, len(messages)-1)
+					body = fmt.Sprintf("%s\n\n... and %d more", body, len(messages)-1)
 				}
 
 				internal.Notify(summary, body, myIcon)

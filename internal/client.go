@@ -32,6 +32,7 @@ type YammerMessage struct {
 	ClientURL     string            `json:"client_url"`
 	DirectMessage bool              `json:"direct_message"`
 	Privacy       string            `json:"privacy"`
+	WebUrl        string            `json:"web_url"`
 }
 
 type YammerMessageResponse struct {
