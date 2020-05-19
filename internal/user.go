@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strconv"
 )
 
 // User is the data structure to represent a single user.
@@ -121,12 +122,17 @@ func (users *Users) GetMugFile(user *User) (*os.File, error) {
 func (users *Users) DumpMugToFile(user *User) (*os.File, error) {
 
 	// if we don't have a mug
-	if user.mugShot == nil || len(user.mugShot) < 1 {
+	imageData := user.mugShot
+	if imageData == nil || len(imageData) < 1 {
 		return nil, fmt.Errorf("nothing to dump")
 	}
 
-	//Create a temp file
-	file, errTmp := ioutil.TempFile(users.tmpdir, fmt.Sprintf("goyammer_%d_*.jpg", user.ID))
+	// create a temp file
+	return DumpImage(users.tmpdir, strconv.FormatInt(user.ID, 10), imageData)
+}
+
+func DumpImage(tmpdir string, infix string, imageData []byte) (*os.File, error) {
+	file, errTmp := ioutil.TempFile(tmpdir, fmt.Sprintf("goyammer_%s_*.jpg", infix))
 	if errTmp != nil {
 		return nil, fmt.Errorf("couldn't create temp file: %v", errTmp)
 	}
@@ -134,8 +140,8 @@ func (users *Users) DumpMugToFile(user *User) (*os.File, error) {
 		_ = file.Close()
 	}()
 
-	//Write the bytes to the file
-	_, errWrite := file.Write(user.mugShot)
+	// write the bytes to the file
+	_, errWrite := file.Write(imageData)
 	if errWrite != nil {
 		return nil, fmt.Errorf("couldn't write mug to temp file: %v", errWrite)
 	}

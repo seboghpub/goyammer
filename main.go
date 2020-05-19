@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/seboghpub/goyammer/icon"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -25,11 +26,12 @@ type app struct {
 	users    *internal.Users
 	messages *internal.Messages
 	tmpdir   string
+	logo     string
 }
 
 type Command int
 
-const USAGE_MSG = `
+const UsageMsg = `
 usage: goyammer <command> [<args>]
 
 commands:
@@ -113,7 +115,7 @@ func main() {
 
 	case HELP:
 
-		fmt.Print(USAGE_MSG)
+		fmt.Print(UsageMsg)
 
 	case LOGIN:
 
@@ -194,16 +196,27 @@ func main() {
 			// get token from file
 			token := internal.GetToken()
 
-			// create a tmpdir dir where we store mug shot files
+			// create a tmpdir dir where we store mug shot files and the logo
+			// note: we need a temp-dir as github.com/mqu/go-notify only supports file-based logos/mugshots.
 			tmpdir, errTmp := ioutil.TempDir("", "goyammer-mugshots")
 			if errTmp != nil {
 				log.Fatal().Msg(fmt.Sprintf("couldn't create tmpdir directory: %v", errTmp))
 			}
 
+			// set the default application logo
+			logo := "face-smile-big"
+			logoFile, errLogo := internal.DumpImage(tmpdir, "logo", icon.Main)
+			if errLogo != nil {
+				log.Warn().Err(errLogo).Msg("failed to dump logo")
+			} else {
+				logo = logoFile.Name()
+			}
+
+			// collect application assets
 			client := internal.NewClient(token)
 			users := internal.NewUsers(client, tmpdir)
 			messages := internal.NewMessages(client)
-			app := &app{users: users, messages: messages, tmpdir: tmpdir}
+			app := &app{users: users, messages: messages, tmpdir: tmpdir, logo: logo}
 			app.setupCloseHandler()
 
 			systray.Run(func() {
@@ -260,7 +273,7 @@ func (app *app) doPoll(interval uint) {
 	internal.Notify(
 		"goyammer",
 		fmt.Sprintf("Listening on %d groups for user %s.", len(*currentUser.Groups), currentUser.FullName),
-		"face-smile-big")
+		app.logo)
 
 	// POLL messages
 	for {
@@ -318,11 +331,11 @@ func (app *app) handleMessages(groupName string, messages []*internal.Message, c
 			// only if no message from the batch has been notified and message was not send by current user
 			if !notified && message.SenderID != currentUser.ID {
 
-				// get mugshot file
-				icon := "face-smile-big"
+				// set icon (either mugshot or default logo)
+				myIcon := app.logo
 				file, errMug := app.users.GetMugFile(user)
 				if errMug == nil {
-					icon = file.Name()
+					myIcon = file.Name()
 				}
 
 				summary := user.FullName
@@ -331,7 +344,7 @@ func (app *app) handleMessages(groupName string, messages []*internal.Message, c
 					body = fmt.Sprintf("%s\n... and %d more", body, len(messages)-1)
 				}
 
-				internal.Notify(summary, body, icon)
+				internal.Notify(summary, body, myIcon)
 
 				notified = true
 			}
