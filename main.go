@@ -82,7 +82,7 @@ func main() {
 
 	// subcommand flag pointers
 	loginClientId := loginCommand.String("client", "", "The client ID. (Required)")
-	pollInterval := pollCommand.Uint("interval", 3, "The number of seconds to wait between request clientId. (Optional)")
+	pollInterval := pollCommand.Uint("interval", 10, "The number of seconds to wait between request clientId. (Optional)")
 	pollOutput := pollCommand.String("output", "", "Where to send output to (Optional)")
 	pollForeground := pollCommand.Bool("foreground", false, "Run in foreground (Optional)")
 
