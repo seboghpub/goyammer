@@ -17,16 +17,18 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/seboghpub/goyammer/internal"
+	"github.com/shirou/gopsutil/process"
 )
 
 var buildVersion = "to be set by linker"
 var buildGithash = "to be set by linker"
 
 type app struct {
-	users    *internal.Users
-	messages *internal.Messages
-	tmpdir   string
-	logo     string
+	users      *internal.Users
+	messages   *internal.Messages
+	tmpdir     string
+	logo       string
+	background bool
 }
 
 type Command int
@@ -66,12 +68,17 @@ func (cmd Command) string() string {
 
 func main() {
 
+	background := isBackround()
+
 	// initialze logger
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
-	// a puristic console writer config
-	writer := zerolog.ConsoleWriter{Out: os.Stderr}
-	log.Logger = log.Output(writer)
+	if !background {
+
+		// a puristic console writer config
+		writer := zerolog.ConsoleWriter{Out: os.Stderr}
+		log.Logger = log.Output(writer)
+	}
 
 	// initialize go-notify
 	notify.Init("goyammer")
@@ -87,6 +94,7 @@ func main() {
 	pollInterval := pollCommand.Uint("interval", 10, "The number of seconds to wait between request clientId. (Optional)")
 	pollOutput := pollCommand.String("output", "", "Where to send output to (Optional)")
 	pollForeground := pollCommand.Bool("foreground", false, "Run in foreground (Optional)")
+	//pollDetached := pollCommand.Bool("detached", false, "internal flag")
 
 	// parse the commandline
 	var command = POLL
@@ -216,7 +224,7 @@ func main() {
 			client := internal.NewClient(token)
 			users := internal.NewUsers(client, tmpdir)
 			messages := internal.NewMessages(client)
-			app := &app{users: users, messages: messages, tmpdir: tmpdir, logo: logo}
+			app := &app{users: users, messages: messages, tmpdir: tmpdir, logo: logo, background: background}
 			app.setupCloseHandler()
 
 			systray.Run(func() {
@@ -226,6 +234,20 @@ func main() {
 
 		}
 	}
+}
+
+func isBackround() bool {
+	proc, errStat := process.NewProcess(int32(os.Getpid()))
+	if errStat != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "failed to stat current process: %s", errStat)
+		os.Exit(1)
+	}
+	background, errBack := proc.Background()
+	if errBack != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "failed to get background info: %s", errBack)
+		os.Exit(1)
+	}
+	return background
 }
 
 // SetupCloseHandler creates a 'listener' on a new goroutine which will notify the
@@ -318,15 +340,23 @@ func (app *app) handleMessages(groupName string, messages []*internal.Message, c
 		// if there is plain text in the message and we have a full name
 		if message.Body.Plain != "" && user.FullName != "" {
 
-			// construct and format the logLine
-			logLine := re.ReplaceAllString(message.Body.Plain, " ")
-			logLine = fmt.Sprintf("%s - %s | %s",
-				internal.ElipseMe(groupName, 6, true),
-				internal.ElipseMe(user.FullName, 6, true),
-				internal.ElipseMe(logLine, 50, false))
+			// replace newlines
+			simpleMessage := re.ReplaceAllString(message.Body.Plain, " ")
 
-			// log
-			log.Info().Msg(logLine)
+			// construct and format the logLine
+			if app.background {
+
+				// construct and format the logLine
+				log.Info().Str("group", groupName).Str("user", user.FullName).Msg(simpleMessage)
+			} else {
+
+				// construct and format the logLine
+				logLine := fmt.Sprintf("%s - %s | %s",
+					internal.ElipseMe(groupName, 6, true),
+					internal.ElipseMe(user.FullName, 6, true),
+					internal.ElipseMe(simpleMessage, 50, false))
+				log.Info().Msg(logLine)
+			}
 
 			// only if no message from the batch has been notified and message was not send by current user
 			if !notified && message.SenderID != currentUser.ID {
