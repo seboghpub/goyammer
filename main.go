@@ -343,19 +343,20 @@ func (app *app) handleMessages(groupName string, messages []*internal.Message, c
 			// replace newlines
 			simpleMessage := re.ReplaceAllString(message.Body.Plain, " ")
 
-			// construct and format the logLine
+			// log for background or foreground
 			if app.background {
 
-				// construct and format the logLine
-				log.Info().Str("group", groupName).Str("user", user.FullName).Msg(simpleMessage)
+				// construct and format the logMsg
+				logMsg := fmt.Sprintf("%s -- %s", simpleMessage, message.WebUrl)
+				log.Info().Str("group", groupName).Str("user", user.FullName).Msg(logMsg)
 			} else {
 
-				// construct and format the logLine
-				logLine := fmt.Sprintf("%s - %s | %s",
+				// construct and format the logMsg
+				logMsg := fmt.Sprintf("%s - %s | %s",
 					internal.ElipseMe(groupName, 6, true),
 					internal.ElipseMe(user.FullName, 6, true),
 					internal.ElipseMe(simpleMessage, 50, false))
-				log.Info().Msg(logLine)
+				log.Info().Msg(logMsg)
 			}
 
 			// only if no message from the batch has been notified and message was not send by current user
